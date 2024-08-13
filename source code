@@ -1,0 +1,210 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Change to the I2C address of your LCD if needed
+
+#define gas_red 11
+#define gas_green 10
+#define ultrasonic_red 8
+#define temp_pin A1
+#define temp_red 6
+#define temp_green 7
+#define ADC_VREF_mV 5000.0 // in millivolt
+#define ADC_RESOLUTION 1024.0
+#define Trig 13
+#define Echo 12
+#define buzzer 9
+#define gas_conc A0
+
+
+#include <DHT.h>
+#define DHTPIN 5
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
+#define LED_PIN 6
+
+// Temperature thresholds for the LED control
+const float maxTemp = 30.0; // Maximum temperature  in °C
+const float minTemp = 10.0; // Minimum temperature  in °C
+
+void setup() {
+
+  lcd.init();//initialiize the led 
+  lcd.backlight();//turn on the led backlight on 
+  pinMode(Trig, OUTPUT); // Ultrasonic sensor trig pin
+  pinMode(Echo, INPUT); // Ultrasonic sensor echo pin 
+  pinMode(buzzer, OUTPUT); // Buzzer output
+  pinMode(gas_conc, INPUT); // Gas concentration
+  pinMode(gas_red, OUTPUT); // Max gas level alert
+  pinMode(gas_green, OUTPUT); // Below danger level
+  pinMode(ultrasonic_red, OUTPUT); // Distance less than 100 cm
+  pinMode(temp_pin, INPUT); // Read temperature
+  pinMode(temp_red, OUTPUT); // Max temperature alert
+  pinMode(temp_green, OUTPUT); // Normal temperature indicator
+  pinMode(LED_PIN, OUTPUT); // LED pin for temperature threshold alert
+  Serial.begin(9600);
+  dht.begin();
+}
+
+void loop() {
+  
+  // Ultrasonic sensor
+  digitalWrite(Trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig, LOW);
+
+  float time = pulseIn(Echo, HIGH);
+  float distance = 0.0343 * time / 2; // Speed of sound = 0.0343 cm/us
+
+  lcd.setCursor(0, 0);
+  lcd.print("Distance:");
+  lcd.setCursor(10, 0);
+  lcd.print(distance);
+  lcd.setCursor(13, 0);
+  lcd.print(" cm");
+  delay(2000);
+  lcd.clear();
+  Serial.print("Distanc= ");
+  Serial.println(distance);
+
+  // Gas sensor
+  int gas_val = analogRead(gas_conc);
+  lcd.setCursor(0, 0);
+  lcd.print("Gas Level=");
+  lcd.setCursor(10, 0);
+  lcd.print(gas_val);
+  delay(1000);
+  lcd.clear();
+  Serial.print("gas levele : ");
+  Serial.println(gas_val);
+
+
+
+  // Check gas level
+  if (gas_val <= 200) {
+    digitalWrite(gas_red, LOW);
+    digitalWrite(buzzer, LOW);
+    digitalWrite(gas_green, HIGH); // Green LED for normal gas level
+  } else {
+    digitalWrite(gas_red, HIGH);
+    digitalWrite(buzzer, HIGH);
+    digitalWrite(gas_green, LOW);
+  }
+
+
+  // Check ultrasonic distance
+  if ( distance < 100) {
+    digitalWrite(ultrasonic_red, HIGH);
+    digitalWrite(buzzer, HIGH);
+  } else {
+    digitalWrite(ultrasonic_red, LOW);
+    digitalWrite(buzzer, LOW);
+  }
+
+ 
+  // Reading temperature and humidity values from DHT sensor
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Failed to read from DHT sensor!");
+    lcd.setCursor(0,0);
+    lcd.print("N/A");
+    return;
+  }
+
+  // Print temperature and humidity values to the Serial Monitor
+     lcd.setCursor(0,0);
+    lcd.print("Humidity : ");
+       lcd.setCursor(10,0);
+    lcd.print(h);
+    
+        lcd.setCursor(0,1);
+    lcd.print("Temp : ");
+       lcd.setCursor(8,1);
+    lcd.print(t);
+        lcd.setCursor(12,1);
+    lcd.print("*C");
+    
+  Serial.print("Humidity: ");
+  Serial.print(h);
+  Serial.print(" %\t");
+  Serial.print("Temperature: ");
+  Serial.print(t);
+  Serial.println(" *C");
+  delay(2000);
+  lcd.clear();
+ // Check temperature range
+  if (t>= 40 || t<= 20) {
+    digitalWrite(temp_red, HIGH);
+    digitalWrite(buzzer, HIGH);
+    digitalWrite(temp_green, LOW);
+  } else {
+    digitalWrite(temp_red, LOW);
+    digitalWrite(temp_green, HIGH);
+  }
+
+ 
+  // Wait a few seconds between measurements
+ 
+  
+}
+
+/*#include "DHT.h"
+
+#define DHTPIN  5
+#define buzzer  9      // Pin where the DHT11 data pin is connected
+#define DHTTYPE DHT11     // DHT 11
+
+DHT dht(DHTPIN, DHTTYPE);
+
+#define LED_PIN 6         // Pin where the LED is connected
+
+// Temperature thresholds for the LED control
+const float maxTemp = 30.0; // Maximum temperature threshold in °C
+const float minTemp = 10.0; // Minimum temperature threshold in °C
+
+void setup() {
+  Serial.begin(9600);
+  dht.begin();
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(buzzer, OUTPUT); // Ensure LED is off at start
+}
+
+void loop() {
+  // Reading temperature and humidity values
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+
+  // Print temperature and humidity values to the Serial Monitor
+  Serial.print("Humidity: ");
+  Serial.print(h);
+  Serial.print(" %\t");
+  Serial.print("Temperature: ");
+  Serial.print(t);
+  Serial.println(" *C");
+
+  // LED control logic based on temperature thresholds
+  if (t >= maxTempThreshold) {
+    digitalWrite(LED_PIN, HIGH);
+    //digitalWrite(LED_PIN, LOW);
+    digitalWrite(buzzer, HIGH); // Turn on LED if temperature exceeds max threshold
+  } 
+  else if (t <= minTempThreshold) {
+    digitalWrite(LED_PIN, LOW);  // Turn off LED if temperature is below min threshold
+  }
+
+  // Wait a few seconds between measurements
+  delay(2000);
+}
+
+*/
